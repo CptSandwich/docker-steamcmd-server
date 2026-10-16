@@ -50,6 +50,7 @@ RUN useradd -d $DATA_DIR -s /bin/bash -g $GID -u $UID $USER && \
         dbus \
         libfreetype6 \
         libvulkan1 \
+        python3 \
         curl \
         wget \
         jq \
@@ -80,10 +81,10 @@ RUN mkdir $STEAMCMD_DIR && \
 
 # Fail the build rather than publish an image the 1.0 server cannot start in. Proton itself is
 # installed by the start script into the data volume (anything put in /serverdata here is
-# hidden by the mount), so this only unpacks the two files it checks.
+# hidden by the mount), so this only unpacks the files it checks.
 RUN mkdir /tmp/proton-check && \
     wget -q "$GE_PROTON_URL" -O - | tar -xz -C /tmp/proton-check --wildcards \
-        '*/x86_64-unix/lsteamclient.so' '*/x86_64-unix/ntdll.so' && \
+        "GE-Proton${GE_PROTON_VERSION}/proton" '*/x86_64-unix/lsteamclient.so' '*/x86_64-unix/ntdll.so' && \
     if ! grep -q SteamUtils011 /tmp/proton-check/*/files/lib/wine/x86_64-unix/lsteamclient.so; then \
         echo "GE-Proton ${GE_PROTON_RELEASE} lacks SteamUtils011"; exit 1; fi && \
     need=$(grep -ao 'GLIBC_2\.[0-9]*' /tmp/proton-check/*/files/lib/wine/x86_64-unix/ntdll.so | sed 's/GLIBC_//' | sort -V | tail -1) && \
@@ -91,6 +92,7 @@ RUN mkdir /tmp/proton-check && \
     echo "glibc: Proton needs ${need}, image has ${have}" && \
     dpkg --compare-versions "$have" ge "$need" && \
     test -e /usr/lib/x86_64-linux-gnu/libvulkan.so.1 && \
+    head -1 "/tmp/proton-check/GE-Proton${GE_PROTON_VERSION}/proton" | grep -q python3 && command -v python3 && \
     rm -rf /tmp/proton-check
 
 #Server Start
