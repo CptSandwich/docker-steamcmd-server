@@ -80,8 +80,8 @@ RUN mkdir $STEAMCMD_DIR && \
     mkdir $SERVER_DIR
 
 # Fail the build rather than publish an image the 1.0 server cannot start in. Proton itself is
-# installed by the start script into the data volume (anything put in /serverdata here is
-# hidden by the mount), so this only unpacks the files it checks.
+# installed at runtime by the start script, under /serverdata/Steam, so this only unpacks the
+# files it checks.
 RUN mkdir /tmp/proton-check && \
     wget -q "$GE_PROTON_URL" -O - | tar -xz -C /tmp/proton-check --wildcards \
         "GE-Proton${GE_PROTON_VERSION}/proton" '*/x86_64-unix/lsteamclient.so' '*/x86_64-unix/ntdll.so' && \

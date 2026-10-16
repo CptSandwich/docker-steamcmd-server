@@ -124,7 +124,13 @@ if [ ! -f ${SERVER_DIR}/enshrouded_server.exe ]; then
   echo "---Something went wrong, can't find the executable, putting container into sleep mode!---"
   sleep infinity
 else
-  ${ASTEAM_PATH}/compatibilitytools.d/GE-Proton${GE_PROTON_VERSION}/proton run ${SERVER_DIR}/enshrouded_server.exe ${GAME_PARAMS} &
+  # `proton run` starts the game through Proton's steam.exe shim, which under GE-Proton 11
+  # hangs the 1.0 server before it opens its log. runinprefix starts it directly (as
+  # mornedhels/enshrouded-server does) but skips prefix setup, so getcompatpath, which runs
+  # no game, creates or upgrades the prefix first.
+  PROTON="${ASTEAM_PATH}/compatibilitytools.d/GE-Proton${GE_PROTON_VERSION}/proton"
+  "${PROTON}" getcompatpath "${SERVER_DIR}" > /dev/null
+  "${PROTON}" runinprefix ${SERVER_DIR}/enshrouded_server.exe ${GAME_PARAMS} &
   
   # Find pid for enshrouded_server.exe
   timeout=0
