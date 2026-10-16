@@ -1,11 +1,17 @@
-FROM debian:12-slim
+# Debian 13 for glibc 2.41: GE-Proton 11 needs 2.38, and Enshrouded 1.0 needs GE-Proton 11.
+# Its Steamworks SDK asks for SteamUtils011, which no GE-Proton 10 release provides (checked
+# 10-34): the server logs "Version Mismatch / No SteamUtils011" and exits.
+FROM debian:13-slim
 
 LABEL org.opencontainers.image.authors="nodiaque-github@abinemail.com"
-LABEL org.opencontainers.image.source="https://github.com/nodiaque/docker-steamcmd-server"
+LABEL org.opencontainers.image.source="https://github.com/CptSandwich/docker-steamcmd-server"
 
 ENV HOME="/serverdata"
-ENV GE_PROTON_VERSION="10-28"
-ENV GE_PROTON_URL="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton${GE_PROTON_VERSION}/GE-Proton${GE_PROTON_VERSION}.tar.gz"
+# From 11.x GE names the download and its folder with the arch; the start script finds Proton
+# at compatibilitytools.d/GE-Proton${GE_PROTON_VERSION}.
+ENV GE_PROTON_RELEASE="11-9"
+ENV GE_PROTON_VERSION="${GE_PROTON_RELEASE}-x86_64"
+ENV GE_PROTON_URL="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton${GE_PROTON_RELEASE}/GE-Proton${GE_PROTON_VERSION}.tar.gz"
 ENV DATA_DIR="/serverdata"
 ENV GAME_ID="2278520"
 ENV GAME_PARAMS=""
@@ -43,6 +49,7 @@ RUN useradd -d $DATA_DIR -s /bin/bash -g $GID -u $UID $USER && \
         winbind \
         dbus \
         libfreetype6 \
+        libvulkan1 \
         curl \
         wget \
         jq \
@@ -69,8 +76,22 @@ RUN chmod -R 770 /opt/config/
 RUN chown -R $USER /opt/config/
 
 RUN mkdir $STEAMCMD_DIR && \
-    mkdir $SERVER_DIR && \
-    wget "$GE_PROTON_URL" -O "${DATA_DIR}/GE-Proton${GE_PROTON_VERSION}.tgz"
+    mkdir $SERVER_DIR
+
+# Fail the build rather than publish an image the 1.0 server cannot start in. Proton itself is
+# installed by the start script into the data volume (anything put in /serverdata here is
+# hidden by the mount), so this only unpacks the two files it checks.
+RUN mkdir /tmp/proton-check && \
+    wget -q "$GE_PROTON_URL" -O - | tar -xz -C /tmp/proton-check --wildcards \
+        '*/x86_64-unix/lsteamclient.so' '*/x86_64-unix/ntdll.so' && \
+    if ! grep -q SteamUtils011 /tmp/proton-check/*/files/lib/wine/x86_64-unix/lsteamclient.so; then \
+        echo "GE-Proton ${GE_PROTON_RELEASE} lacks SteamUtils011"; exit 1; fi && \
+    need=$(grep -ao 'GLIBC_2\.[0-9]*' /tmp/proton-check/*/files/lib/wine/x86_64-unix/ntdll.so | sed 's/GLIBC_//' | sort -V | tail -1) && \
+    have=$(getconf GNU_LIBC_VERSION | awk '{print $2}') && \
+    echo "glibc: Proton needs ${need}, image has ${have}" && \
+    dpkg --compare-versions "$have" ge "$need" && \
+    test -e /usr/lib/x86_64-linux-gnu/libvulkan.so.1 && \
+    rm -rf /tmp/proton-check
 
 #Server Start
 ENTRYPOINT ["/opt/scripts/start.sh"]
